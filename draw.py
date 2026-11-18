@@ -1,11 +1,11 @@
-"""PIL drawing code for the news-image-20261118 front page.
+"""PIL drawing code for the news-image-20261118 front page (dense rebuild).
 
-Draws a 1024x1024 newspaper front page for WEDNESDAY, 18 NOVEMBER 2026.
+Draws a 1024x1024 newspaper front page for WEDNESDAY, 18 NOVEMBER 2026
+with 36 real, verified stories across 6 continents, plus 3 footer briefs.
 Deterministic: fixed fonts, fixed text, no randomness, no timestamps.
 Standard library + Pillow only. No network.
 """
 
-import math
 import os
 
 from PIL import Image, ImageDraw, ImageFont
@@ -19,16 +19,18 @@ SANS_BOLD = os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")
 
 PAPER = (248, 244, 236)
 INK = (26, 26, 26)
-MUTED = (92, 88, 80)
+MUTED = (78, 74, 66)
 NAVY = (20, 33, 61)
-NAVY_PANEL = (24, 42, 78)
 RED = (185, 28, 28)
 GOLD = (201, 162, 39)
 GOLD_LIGHT = (227, 179, 65)
 BLUE = (29, 78, 216)
 TEAL = (13, 148, 136)
-LIGHT_BLUE = (56, 130, 200)
+ORANGE = (194, 94, 10)
+PURPLE = (109, 40, 217)
+GREEN = (21, 128, 61)
 BORDER = (214, 206, 188)
+LIGHT_LINE = (228, 221, 205)
 WHITE = (255, 255, 255)
 FOOTER_LINE = (120, 132, 165)
 
@@ -37,7 +39,7 @@ def font(path, size):
     return ImageFont.truetype(path, size)
 
 
-def wrap_text(draw, text, fnt, max_width):
+def wrap_text(draw, text, fnt, max_width, max_lines=None):
     """Wrap text to fit max_width pixels. Returns a list of lines."""
     words = text.split()
     lines = []
@@ -52,11 +54,17 @@ def wrap_text(draw, text, fnt, max_width):
             cur = w
     if cur:
         lines.append(cur)
+    if max_lines is not None and len(lines) > max_lines:
+        lines = lines[:max_lines]
+        # trim the last line so it fits with an ellipsis
+        while lines and draw.textlength(lines[-1] + " ...", font=fnt) > max_width:
+            lines[-1] = lines[-1][:-1]
+        lines[-1] = lines[-1].rstrip() + " ..."
     return lines
 
 
-def draw_spaced_text(draw, xy, text, fnt, fill, tracking=4):
-    """Draw text with extra letter spacing (tracking) for the date line."""
+def draw_spaced_text(draw, xy, text, fnt, fill, tracking=3):
+    """Draw text with extra letter spacing (tracking)."""
     x, y = xy
     for ch in text:
         draw.text((x, y), ch, font=fnt, fill=fill)
@@ -64,271 +72,230 @@ def draw_spaced_text(draw, xy, text, fnt, fill, tracking=4):
     return x
 
 
-def spaced_width(draw, text, fnt, tracking=4):
+def spaced_width(draw, text, fnt, tracking=3):
     total = 0
     for ch in text:
         total += draw.textlength(ch, font=fnt) + tracking
     return total - tracking
 
 
-# ---------------------------------------------------------------- icons
+# ---------------------------------------------------------------- data
+# 36 real, verified stories from Wednesday, 18 November 2026.
+# Lead (Gulf tankers) is drawn separately; the grid holds the other 35.
 
-def draw_wave(draw, x0, x1, base_y, amp, period, fill, width=2):
-    pts = []
-    x = x0
-    while x <= x1:
-        y = base_y + amp * math.sin(2 * math.pi * (x - x0) / period)
-        pts.append((x, y))
-        x += 4
-    draw.line(pts, fill=fill, width=width)
+LEAD = {
+    "kicker": "LEAD  \u2014  GULF WAR",
+    "headline": "US SINKS FIVE IRANIAN TANKERS",
+    "body": (
+        "Washington destroyed five Iranian oil tankers \u2014 Kaviz, "
+        "Charminar, Horizon 1, Riesco and Derya \u2014 after the Guards twice "
+        "tried to hit a US warship. Iran hit back at ten ships near Hormuz "
+        "and fired missiles at US forces in Jordan. Oil topped $100."
+    ),
+}
 
+# (region, color, [(headline, summary), ...]) in column order.
+COLUMNS = [
+    [
+        ("MIDDLE EAST", RED, [
+            ("US STRIKES QESHM; IRAN HITS BAHRAIN",
+             "US jets hit an IRGC missile site on Qeshm Island; Iran fired drones at Bahrain and Kuwait."),
+            ("UN WARNS OF GAZA COLD DEATHS",
+             "Four nations demand Israel open aid access as 1.7m displaced face winter without shelter."),
+            ("GAZA CEASEFIRE \u2018MAY COLLAPSE\u2019",
+             "Board of Peace warns the truce will fail without urgent action to shore it up."),
+            ("EISENKOT TAPPED TO LEAD ISRAEL",
+             "President Herzog asks the ex-army chief to form a government, bypassing Netanyahu."),
+            ("YEMEN CALLS HOUTHIS TERRORISTS",
+             "Parliament designates the group a terrorist organisation as it presses toward Aden."),
+        ]),
+        ("EUROPE", BLUE, [
+            ("UKRAINE HITS KERCH BRIDGE AGAIN",
+             "Second-night strike collapses the road arch into the strait; two killed, traffic halted."),
+            ("RUSSIA POUNDS KYIV BRIDGES",
+             "Record 1,441 Ukrainian drones downed in a day as Moscow hits the capital's crossings."),
+            ("US SCOLDS KYIV ON DEEP STRIKES",
+             "Washington criticises the attacks; Germany pushes back as peace talks continue."),
+            ("146,000 PROTEST IN FRANCE",
+             "Fourth weekend of demonstrations over living costs as unions strike nationwide."),
+            ("5.3 QUAKE SHAKES ROMANIA",
+             "A magnitude 5.3 earthquake strikes the country; no major damage reported."),
+            ("GAS TANKER HIT IN BLACK SEA",
+             "LPG carrier Gas Husky struck off Bulgaria; all 19 crew members rescued."),
+            ("RUSSIAN PLANE CRASH KILLS 19",
+             "Military aircraft goes down in Siberia's Kemerovo region."),
+        ]),
+    ],
+    [
+        ("ASIA", TEAL, [
+            ("NORTH KOREA FIRES MISSILE",
+             "Pyongyang launches a ballistic missile toward the Sea of Japan amid a landmine row."),
+            ("XI, PUTIN AND TRUMP MEET IN SHENZHEN",
+             "The three leaders gather at APEC for a first-ever trilateral summit on Thursday."),
+            ("TRUMP MEETS QUAD IN MANILA",
+             "Quad leaders discuss maritime security and cyber threats; Modi joins ASEAN talks."),
+            ("CYCLONE AKVAN BEARS DOWN ON INDIA",
+             "Storm heads for Andhra Pradesh landfall on 20 Nov; heavy rain over Odisha."),
+            ("DHONI RETIRES FROM IPL",
+             "India great ends a 19-year playing career and becomes Chennai's mentor."),
+            ("INDIA WIN 10TH SAFF TITLE",
+             "India beat Pakistan 2-1 in the final for a record tenth championship."),
+            ("COP31 ENTERS DECISIVE PHASE",
+             "Antalya climate talks deadlocked on finance, with 144 disputed items in the draft."),
+        ]),
+        ("AFRICA", ORANGE, [
+            ("EBOLA TOPS 11,000 CASES IN CONGO",
+             "Outbreak has killed more than 5,400; cases spread to Kenya, Uganda and Nigeria."),
+            ("WHO APPROVES TWO EBOLA VACCINES",
+             "Trials green-lit for vaccines designed for the Bundibugyo strain."),
+            ("UGANDA ORDERS EBOLA QUARANTINE",
+             "21-day quarantine for citizens returning from DR Congo."),
+            ("NIGERIA PROBES SUSPECTED CASES",
+             "Two suspected Ebola cases isolated in the northeast; contact tracing under way."),
+            ("ERITREA BORDER CLASHES FLARE",
+             "Fighting near the border raises fears of a wider war in Tigray."),
+        ]),
+    ],
+    [
+        ("AMERICAS", (30, 58, 138), [
+            ("PELTOLA WINS ALASKA SENATE SEAT",
+             "Democrat flips the seat; party reaches 56 seats in the Senate."),
+            ("US LOSES MEASLES-FREE STATUS",
+             "Elimination status ends after 26 years as cases pass 5,400, a 40-year high."),
+            ("NVIDIA BEATS FORECASTS",
+             "Chipmaker's shares jump 4% after hours as sales double year on year."),
+            ("FUNDS DUMP TECH AT RECORD PACE",
+             "BofA survey: tech exposure cut most since 2006; 52% expect AI capex cuts."),
+            ("ANTHROPIC TO LIST ON NASDAQ",
+             "AI lab set for a stock market debut on 19 November."),
+            ("TRUMP: DIRTY-BOMB REPORT TAKEN SERIOUSLY",
+             "President says the US is looking into a report of an Iranian dirty-bomb plot."),
+        ]),
+        ("OCEANIA & CULTURE", PURPLE, [
+            ("CYCLONE XAVIER HITS COOK ISLANDS",
+             "Category 5 storm brings gusts of 315 km/h to the Northern Cook Islands."),
+            ("FIJI DECLARES DROUGHT DISASTER",
+             "National disaster declared over an El Ni\u00f1o-driven drought."),
+            ("FELA KUTI ENTERS ROCK HALL OF FAME",
+             "Nigerian icon becomes the first African inducted into the Rock Hall."),
+            ("CRICKET AUSTRALIA OPENS SANDPAPERGATE FORUM",
+             "Players invited to share accounts after fresh claims by Usman Khawaja."),
+            ("PATTINSON IS THE NEW JAMES BOND",
+             "British actor named as the next 007."),
+        ]),
+    ],
+]
 
-def draw_ship(draw, x0, y0, w, h):
-    """Stylised oil tanker in a navy panel. Panel: (x0, y0, w, h)."""
-    draw.rectangle([x0, y0, x0 + w, y0 + h], fill=NAVY_PANEL)
-    # alert sun
-    draw.ellipse([x0 + 18, y0 + 14, x0 + 52, y0 + 48], fill=RED)
-    # hull
-    hull_y = y0 + h - 62
-    draw.polygon(
-        [(x0 + 22, hull_y), (x0 + w - 22, hull_y),
-         (x0 + w - 46, hull_y + 30), (x0 + 46, hull_y + 30)],
-        fill=(232, 224, 208),
-    )
-    draw.rectangle([x0 + 22, hull_y, x0 + w - 22, hull_y + 4], fill=RED)
-    # containers on deck
-    cx = x0 + 58
-    cy = hull_y - 26
-    cols = [RED, GOLD, (240, 240, 240), BLUE, GOLD, RED, (240, 240, 240)]
-    for i, c in enumerate(cols):
-        draw.rectangle([cx + i * 34, cy, cx + i * 34 + 30, cy + 26], fill=c)
-    # bridge tower
-    bx = x0 + w - 66
-    draw.rectangle([bx, hull_y - 52, bx + 34, hull_y], fill=(240, 240, 240))
-    draw.rectangle([bx + 5, hull_y - 46, bx + 29, hull_y - 34], fill=NAVY)
-    # funnel
-    draw.rectangle([x0 + 30, hull_y - 46, x0 + 52, hull_y], fill=(60, 60, 60))
-    draw.rectangle([x0 + 30, hull_y - 46, x0 + 52, hull_y - 38], fill=RED)
-    # waves
-    wy = y0 + h - 18
-    draw_wave(draw, x0 + 14, x0 + w - 14, wy, 3, 46, (110, 140, 190), 2)
-    draw_wave(draw, x0 + 14, x0 + w - 14, wy + 8, 3, 38, (80, 112, 165), 2)
-
-
-def draw_bridge_icon(draw, x, y, s, color):
-    """Simple suspension bridge in a s x s box at (x, y)."""
-    # deck
-    draw.line([(x + 2, y + s - 12), (x + s - 2, y + s - 12)], fill=color, width=4)
-    # arch
-    draw.arc([x + 4, y + 6, x + s - 4, y + s - 6], 180, 360, fill=color, width=4)
-    # pillars
-    for px in (x + 8, x + s // 2, x + s - 10):
-        draw.line([(px, y + s - 12), (px, y + 12)], fill=color, width=3)
-
-
-def draw_missile_icon(draw, x, y, s, color):
-    """Simple upward missile in a s x s box at (x, y)."""
-    cx = x + s // 2
-    # body
-    draw.rectangle([cx - 6, y + 14, cx + 6, y + s - 14], fill=color)
-    # nose
-    draw.polygon([(cx - 6, y + 14), (cx + 6, y + 14), (cx, y + 2)], fill=color)
-    # fins
-    draw.polygon([(cx - 6, y + s - 18), (cx - 14, y + s - 8), (cx - 6, y + s - 10)],
-                 fill=color)
-    draw.polygon([(cx + 6, y + s - 18), (cx + 14, y + s - 8), (cx + 6, y + s - 10)],
-                 fill=color)
-    # flame
-    draw.polygon([(cx - 5, y + s - 12), (cx + 5, y + s - 12), (cx, y + s - 2)],
-                 fill=(230, 120, 40))
-
-
-def draw_snowflake_icon(draw, x, y, s, color):
-    """Six-point snowflake in a s x s box at (x, y)."""
-    cx, cy = x + s // 2, y + s // 2
-    r = s // 2 - 4
-    for k in range(3):
-        ang = math.radians(60 * k)
-        dx = r * math.cos(ang)
-        dy = r * math.sin(ang)
-        draw.line([(cx - dx, cy - dy), (cx + dx, cy + dy)], fill=color, width=4)
-    draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=color)
-
-
-def draw_globe_icon(draw, x, y, s, color):
-    """Simple globe in a s x s box at (x, y)."""
-    cx, cy = x + s // 2, y + s // 2
-    r = s // 2 - 3
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=4)
-    draw.ellipse([cx - r, cy - 6, cx + r, cy + 6], outline=color, width=3)
-    draw.arc([cx - 8, cy - r, cx + 8, cy + r], 90, 270, fill=color, width=2)
-    draw.arc([cx - 8, cy - r, cx + 8, cy + r], 270, 90, fill=color, width=2)
-
-
-def draw_skyline_icon(draw, x, y, s, color):
-    """Simple city skyline in a s x s box at (x, y)."""
-    base = y + s - 6
-    widths = [12, 16, 12]
-    heights = [26, 38, 22]
-    bx = x + 4
-    for wdt, hgt in zip(widths, heights):
-        draw.rectangle([bx, base - hgt, bx + wdt, base], fill=color)
-        bx += wdt + 4
+FOOTER_BRIEFS = [
+    "World Court to rule on the Myanmar genocide case on Thursday.",
+    "Five EU states plan migrant return hubs in Rwanda.",
+    "South Korea raises its 2027 growth forecast to 3.9%.",
+]
 
 
 # ---------------------------------------------------------------- page
+
+def draw_region_header(d, x, y, w, name, color):
+    """Small region header: coloured square + name + rule line."""
+    d.rectangle([x, y + 2, x + 10, y + 12], fill=color)
+    f = font(SANS_BOLD, 13)
+    d.text((x + 16, y), name, font=f, fill=color)
+    d.line([(x + 16 + d.textlength(name, font=f) + 8, y + 7),
+            (x + w, y + 7)], fill=LIGHT_LINE, width=1)
+    return y + 20
+
+
+def draw_story(d, x, y, w, headline, summary):
+    """One story cell. Returns the y just below it."""
+    f_head = font(SANS_BOLD, 14)
+    f_body = font(SANS, 11)
+    head_lines = wrap_text(d, headline, f_head, w, max_lines=2)
+    hy = y
+    for ln in head_lines:
+        d.text((x, hy), ln, font=f_head, fill=INK)
+        hy += 17
+    body_lines = wrap_text(d, summary, f_body, w, max_lines=2)
+    by = hy + 1
+    for ln in body_lines:
+        d.text((x, by), ln, font=f_body, fill=MUTED)
+        by += 14
+    return by
+
 
 def build_image():
     img = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(img)
 
     # ---- masthead ------------------------------------------------------
-    d.rectangle([0, 0, W, 110], fill=NAVY)
-    f_title = font(SERIF_BOLD, 64)
-    title = "WORLD NEWS"
+    d.rectangle([0, 0, W, 84], fill=NAVY)
+    f_title = font(SERIF_BOLD, 42)
+    title = "WORLD FRONT PAGE"
     tw = d.textlength(title, font=f_title)
-    d.text(((W - tw) / 2, 10), title, font=f_title, fill=WHITE)
-    f_date = font(SANS_BOLD, 27)
+    d.text(((W - tw) / 2, 8), title, font=f_title, fill=WHITE)
+    f_date = font(SANS_BOLD, 20)
     date = "WEDNESDAY, 18 NOVEMBER 2026"
-    dw = spaced_width(d, date, f_date, tracking=4)
-    draw_spaced_text(d, ((W - dw) / 2, 76), date, f_date, GOLD_LIGHT, tracking=4)
-    d.rectangle([0, 110, W, 114], fill=RED)
+    dw = spaced_width(d, date, f_date, tracking=3)
+    draw_spaced_text(d, ((W - dw) / 2, 54), date, f_date, GOLD_LIGHT, tracking=3)
+    d.rectangle([0, 84, W, 88], fill=RED)
+
+    # ---- continents strip ----------------------------------------------
+    f_strip = font(SANS_BOLD, 13)
+    strip = "36 STORIES  \u2022  MIDDLE EAST  \u2022  EUROPE  \u2022  ASIA  \u2022  AFRICA  \u2022  AMERICAS  \u2022  OCEANIA"
+    sw = d.textlength(strip, font=f_strip)
+    d.text(((W - sw) / 2, 96), strip, font=f_strip, fill=NAVY)
+    d.line([(16, 116), (1008, 116)], fill=BORDER, width=1)
 
     # ---- lead story ----------------------------------------------------
-    lead_y0, lead_y1 = 122, 318
-    d.rectangle([28, lead_y0, 996, lead_y1], fill=WHITE, outline=BORDER, width=1)
-    d.rectangle([28, lead_y0, 996, lead_y0 + 4], fill=RED)
-    f_kicker = font(SANS_BOLD, 15)
-    d.text((44, lead_y0 + 14), "LEAD STORY", font=f_kicker, fill=RED)
-    f_lead_head = font(SANS_BOLD, 34)
-    d.text((44, lead_y0 + 36), "US-IRAN WAR ESCALATES",
-           font=f_lead_head, fill=INK)
-    f_lead_body = font(SANS, 17)
-    lead_text = (
-        "The US said it sank five Iranian oil tankers \u2014 Kaviz, Charminar, "
-        "Horizon 1, Riesco and Derya \u2014 after Iran's Revolutionary Guards "
-        "allegedly tried twice to target a US warship. Iran said it attacked "
-        "ten ships near the Strait of Hormuz and fired missiles at US forces "
-        "at the Al-Azraq base in Jordan."
-    )
-    lines = wrap_text(d, lead_text, f_lead_body, 596)
-    ly = lead_y0 + 80
-    for ln in lines:
-        d.text((44, ly), ln, font=f_lead_body, fill=INK)
-        ly += 22
-    # illustration panel, right of the lead text
-    draw_ship(d, 656, lead_y0 + 12, 340, lead_y1 - lead_y0 - 24)
+    lead_y0, lead_y1 = 124, 232
+    d.rectangle([16, lead_y0, 1008, lead_y1], fill=WHITE, outline=BORDER, width=1)
+    d.rectangle([16, lead_y0, 1008, lead_y0 + 4], fill=RED)
+    f_kicker = font(SANS_BOLD, 13)
+    d.text((30, lead_y0 + 12), LEAD["kicker"], font=f_kicker, fill=RED)
+    f_lead_head = font(SANS_BOLD, 30)
+    d.text((30, lead_y0 + 32), LEAD["headline"], font=f_lead_head, fill=INK)
+    f_lead_body = font(SANS, 14)
+    lead_lines = wrap_text(d, LEAD["body"], f_lead_body, 948, max_lines=2)
+    ly = lead_y0 + 68
+    for ln in lead_lines:
+        d.text((30, ly), ln, font=f_lead_body, fill=INK)
+        ly += 18
 
-    # ---- grid stories 2-5 ---------------------------------------------
-    stories = [
-        {
-            "kicker": "UKRAINE", "color": BLUE,
-            "headline": "UKRAINE HITS KERCH BRIDGE AGAIN",
-            "body": (
-                "Kyiv struck the bridge to occupied Crimea for a second night, "
-                "shutting it down, while Russia hit two of its own bridges. US "
-                "officials criticised the deep strikes as Zelenskyy met US "
-                "envoys Kushner and Witkoff."
-            ),
-            "icon": draw_bridge_icon,
-        },
-        {
-            "kicker": "NORTH KOREA", "color": RED,
-            "headline": "NORTH KOREA FIRES MISSILE",
-            "body": (
-                "Pyongyang launched a ballistic missile towards the Sea of Japan, "
-                "South Korea's Joint Chiefs of Staff said, amid heightened "
-                "tensions after a landmine incident at the inter-Korean border."
-            ),
-            "icon": draw_missile_icon,
-        },
-        {
-            "kicker": "GAZA", "color": LIGHT_BLUE,
-            "headline": "UN WARNS OF GAZA COLD DEATHS",
-            "body": (
-                "The UN warned of more deaths from cold as displaced Palestinians "
-                "face winter without shelter. Over 1.7 million remain displaced; "
-                "Australia, Canada, Italy and the UK called on Israel to allow "
-                "unrestricted aid access."
-            ),
-            "icon": draw_snowflake_icon,
-        },
-        {
-            "kicker": "CLIMATE", "color": TEAL,
-            "headline": "COP31 TALKS ENTER DECISIVE PHASE",
-            "body": (
-                "Negotiators at the COP31 climate talks in Antalya entered the "
-                "decisive phase, working through a first draft agreement with 144 "
-                "disputed items before the summit ends on Friday, 20 November."
-            ),
-            "icon": draw_globe_icon,
-        },
-    ]
-    f_head = font(SANS_BOLD, 23)
-    f_body = font(SANS, 16)
-    cols = [28, 526]
-    rows = [330, 532]
-    cell_w, cell_h = 470, 190
-    for i, st in enumerate(stories):
-        cx = cols[i % 2]
-        cy = rows[i // 2]
-        d.rectangle([cx, cy, cx + cell_w, cy + cell_h], fill=WHITE,
-                    outline=BORDER, width=1)
-        d.rectangle([cx, cy, cx + cell_w, cy + 4], fill=st["color"])
-        d.text((cx + 16, cy + 14), st["kicker"], font=f_kicker, fill=st["color"])
-        st["icon"](d, cx + cell_w - 72, cy + 12, 56, st["color"])
-        head_lines = wrap_text(d, st["headline"], f_head, cell_w - 32 - 72)
-        hy = cy + 36
-        for ln in head_lines[:2]:
-            d.text((cx + 16, hy), ln, font=f_head, fill=INK)
-            hy += 27
-        body_lines = wrap_text(d, st["body"], f_body, cell_w - 32)
-        by = hy + 6
-        for ln in body_lines[:4]:
-            d.text((cx + 16, by), ln, font=f_body, fill=INK)
-            by += 20
+    # ---- story grid ----------------------------------------------------
+    grid_y0 = 240
+    grid_y1 = 922
+    col_x = [16, 351, 686]
+    col_w = 322
+    f_region = font(SANS_BOLD, 13)
+    for ci, regions in enumerate(COLUMNS):
+        x = col_x[ci]
+        y = grid_y0
+        for name, color, stories in regions:
+            y = draw_region_header(d, x, y, col_w, name, color)
+            for headline, summary in stories:
+                y = draw_story(d, x, y, col_w, headline, summary)
+                y += 7
+                # light divider between stories
+                d.line([(x, y - 3), (x + col_w, y - 3)], fill=LIGHT_LINE, width=1)
+            y += 2
+        # thin vertical divider between columns
+        if ci < 2:
+            d.line([(x + col_w + 6, grid_y0), (x + col_w + 6, grid_y1)],
+                   fill=BORDER, width=1)
 
-    # ---- story 6, full-width strip --------------------------------------
-    s6_y0, s6_y1 = 734, 850
-    d.rectangle([28, s6_y0, 996, s6_y1], fill=WHITE, outline=BORDER, width=1)
-    d.rectangle([28, s6_y0, 996, s6_y0 + 4], fill=TEAL)
-    d.text((44, s6_y0 + 12), "ASIA", font=f_kicker, fill=TEAL)
-    draw_skyline_icon(d, 920, s6_y0 + 10, 56, TEAL)
-    f_s6_head = font(SANS_BOLD, 24)
-    d.text((44, s6_y0 + 34), "TRUMP IN MANILA, XI HOSTS APEC",
-           font=f_s6_head, fill=INK)
-    s6_text = (
-        "Trump arrived in Manila for Quad talks ahead of a China visit, while "
-        "Xi Jinping hosted the APEC summit in Shenzhen and warned "
-        "unilateralism and protectionism are on the rise."
-    )
-    s6_lines = wrap_text(d, s6_text, f_body, 936)
-    sy = s6_y0 + 66
-    for ln in s6_lines[:2]:
-        d.text((44, sy), ln, font=f_body, fill=INK)
-        sy += 20
-
-    # ---- footer strip ----------------------------------------------------
-    f_y0, f_y1 = 862, 1004
+    # ---- footer ---------------------------------------------------------
+    f_y0, f_y1 = 930, 1018
     d.rectangle([0, f_y0, W, f_y1], fill=NAVY)
-    f_foot_head = font(SANS_BOLD, 18)
-    d.text((44, f_y0 + 12), "ALSO TODAY", font=f_foot_head, fill=GOLD_LIGHT)
-    f_foot = font(SANS, 16)
-    d.text((44, f_y0 + 40),
-           "Israel's president taps Eisenkot to form government, bypassing Netanyahu.",
-           font=f_foot, fill=WHITE)
-    d.text((44, f_y0 + 64),
-           "Cyber-attack disables supermarket freezers across seven European countries.",
-           font=f_foot, fill=WHITE)
-    d.line([(44, f_y0 + 94), (980, f_y0 + 94)], fill=FOOTER_LINE, width=1)
-    f_small = font(SANS, 13)
-    d.text((44, f_y0 + 104),
-           "WORLD NEWS \u2014 WEDNESDAY, 18 NOVEMBER 2026",
-           font=f_small, fill=(170, 180, 205))
+    f_foot_head = font(SANS_BOLD, 14)
+    d.text((30, f_y0 + 8), "ALSO TODAY", font=f_foot_head, fill=GOLD_LIGHT)
+    f_foot = font(SANS, 13)
+    fy = f_y0 + 28
+    for b in FOOTER_BRIEFS:
+        d.text((30, fy), "\u2022  " + b, font=f_foot, fill=WHITE)
+        fy += 18
 
     return img
 
 
 if __name__ == "__main__":
-    build_image().save("/tmp/news-image-20261118-preview.png")
+    build_image().save("/tmp/news-image-20261118-rebuild-preview.png")
     print("preview saved")
